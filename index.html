@@ -252,4 +252,79 @@ async function ciclo(){
     // Mostrar qué repetir
     if (item.type === "pair"){
       wordEl.textContent = `${item.a} / ${item.b}`;
-      infoEl.textContent = "Di
+      infoEl.textContent = "Di ambas (primero la izquierda, luego la derecha)…";
+    } else {
+      wordEl.textContent = item.a;
+      infoEl.textContent = "Di la palabra ahora…";
+    }
+
+    // Grabar tu voz
+    const wav = await grabarWav(talkSecs * 1000);
+
+    // Reproducir al instante
+    infoEl.textContent = "Escuchando tu voz ▶️";
+    await reproducirBlob(wav);
+
+    await sleep(listenSecs * 1000);
+    idx++;
+  }
+
+  infoEl.textContent = "Detenido.";
+  btnStop.disabled = true;
+  btnStart.disabled = false;
+}
+
+btnPerm.onclick = pedirMicrofono;
+
+btnStart.onclick = async () => {
+  if (!stream || !audioCtx){
+    infoEl.textContent = "Primero pulsa 'Permitir micrófono'.";
+    return;
+  }
+  try { await audioCtx.resume(); } catch(e){}
+  ciclo();
+};
+
+btnStop.onclick = () => { running = false; };
+
+/* =========================
+   Cámara frontal (selfie)
+========================= */
+const camVideo = document.getElementById("cam");
+const camInfo = document.getElementById("camInfo");
+const camOn = document.getElementById("camOn");
+const camOff = document.getElementById("camOff");
+let camStream = null;
+
+async function encenderCamara(){
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user" },
+      audio: false
+    });
+    camVideo.srcObject = camStream;
+    camInfo.textContent = "Cámara encendida ✅ (mira el movimiento de tu boca)";
+    camOn.disabled = true;
+    camOff.disabled = false;
+  } catch(e){
+    camInfo.textContent = "No se pudo encender la cámara. Revisa permisos de Safari.";
+  }
+}
+
+function apagarCamara(){
+  if (!camStream) return;
+  camStream.getTracks().forEach(t => t.stop());
+  camStream = null;
+  camVideo.srcObject = null;
+  camInfo.textContent = "Cámara apagada.";
+  camOn.disabled = false;
+  camOff.disabled = true;
+}
+
+camOn.addEventListener("click", encenderCamara);
+camOff.addEventListener("click", apagarCamara);
+</script>
+
+</div>
+</body>
+</html>
