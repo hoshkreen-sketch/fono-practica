@@ -1,254 +1,90 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Práctica Fonemas (leer → grabar → escuchar)</title>
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 18px; }
-    .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
-    button { padding: 10px 12px; border-radius: 12px; border: 1px solid #ccc; background: #fff; }
-    button.primary { border-color: #333; }
-    button:disabled { opacity: .5; }
-    .row { display:flex; gap:10px; flex-wrap: wrap; }
-    .big { font-size: 28px; font-weight: 700; }
-    .hint { color:#555; }
-    select, input { padding: 10px 12px; border-radius: 12px; border: 1px solid #ccc; }
-    audio { width: 100%; margin-top: 10px; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Práctica de Fonemas</title>
+<style>
+body { font-family: system-ui; background:#f9f9f9; margin:0; padding:20px; }
+h1 { font-size: 28px; }
+.big { font-size: 48px; font-weight: 800; text-align:center; margin: 40px 0; }
+button { font-size: 18px; padding: 14px 20px; border-radius: 14px; border: none; background:#222; color:#fff; }
+button.secondary { background:#666; }
+.controls { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+audio { width:100%; margin-top:20px; }
+.info { text-align:center; color:#666; margin-top:10px; }
+</style>
 </head>
 <body>
 
-  <h2>Práctica (leer → grabar → escuchar)</h2>
-  <p class="hint">Tip: usa audífonos para evitar acoples. En iPhone/Safari, toca un botón antes de que se permita audio/micrófono.</p>
+<h1>Práctica de pronunciación</h1>
 
-  <div class="card">
-    <div class="row">
-      <label>
-        Modo:
-        <select id="mode">
-          <option value="series">Series</option>
-          <option value="pvb">P vs B</option>
-          <option value="pvm">P vs M</option>
-          <option value="vocab">Vocabulario B</option>
-          <option value="corto">Sesión corta (suave)</option>
-        </select>
-      </label>
+<div class="big" id="word">Presiona comenzar</div>
 
-      <label>
-        Segundos para repetir:
-        <input id="secs" type="number" min="1" max="10" step="0.5" value="2.5" style="width:90px">
-      </label>
+<div class="controls">
+  <button id="perm">Permitir micrófono</button>
+  <button id="start" disabled>Comenzar</button>
+  <button id="stop" class="secondary" disabled>Detener</button>
+</div>
 
-      <label>
-        Pausa (seg):
-        <input id="pause" type="number" min="0" max="10" step="0.5" value="1.5" style="width:90px">
-      </label>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="big" id="prompt">Listo para empezar</div>
-    <div class="hint" id="status">Pulsa “Permitir micrófono” primero.</div>
-
-    <div class="row" style="margin-top:12px;">
-      <button id="btnPerm" class="primary">Permitir micrófono</button>
-      <button id="btnStart" class="primary" disabled>Iniciar sesión</button>
-      <button id="btnStop" disabled>Detener</button>
-      <button id="btnSpeak">Leer ahora</button>
-    </div>
-
-    <audio id="playback" controls></audio>
-    <div class="row" style="margin-top:10px;">
-      <button id="btnDownload" disabled>Guardar audio (último)</button>
-    </div>
-  </div>
+<audio id="audio" controls></audio>
+<div class="info" id="info"></div>
 
 <script>
-  // ====== Listas (puedes editar) ======
-  const P_B = [
-    ["pasa","basa"], ["pase","base"], ["peso","beso"], ["peca","beca"], ["pasto","basto"],
-    ["polo","bolo"], ["supe","sube"], ["pipa","piba"], ["pata","bata"], ["pala","bala"],
-    ["puso","buzo"], ["pasta","basta"], ["tapa","taba"], ["capo","cabo"], ["topa","toba"]
-  ];
+const palabras = [
+"pa","pe","pi","po","pu",
+"aba","obo","ubu","ebe","ibi",
+"pasa","basa","pesa","mesa","pala","bala",
+"pudo","mudo","bata","bote","buzo","bebé","bicho","billete"
+];
 
-  const P_M = [
-    ["pasa","masa"], ["palo","malo"], ["pesa","mesa"], ["pelón","melón"], ["pipo","mimo"],
-    ["poda","moda"], ["pate","maté"], ["pozo","mozo"], ["pula","mula"], ["pucho","mucho"],
-    ["pío","mío"], ["pisa","misa"], ["dopa","doma"], ["pudo","mudo"], ["pata","mata"]
-  ];
+let stream, recorder, chunks=[], i=0, activo=false;
 
-  const SERIES = ["pa","pe","pi","po","pu","aba","obo","ubu","ebe","ibi","abababa","obobobo","ubububu","ebebebe","ibibibi"];
+const word=document.getElementById("word");
+const info=document.getElementById("info");
+const audio=document.getElementById("audio");
 
-  const VOCAB_B = ["bata","base","bate","bala","baña","bote","bota","bola","botón","botella","buzo","buche","buque","budín","bueno","bebé","beso","beca","bello","bebida","bicho","bien","bife","bigote","billete"];
+document.getElementById("perm").onclick = async () => {
+  stream = await navigator.mediaDevices.getUserMedia({audio:true});
+  document.getElementById("start").disabled=false;
+  info.textContent="Micrófono listo";
+};
 
-  // Sesión corta: 10 series + 5 pvb + 5 pvm
-  const CORTO = [
-    ...SERIES.slice(0,10).map(x => ({type:"one", a:x})),
-    ...P_B.slice(0,5).map(([a,b]) => ({type:"pair", a, b})),
-    ...P_M.slice(0,5).map(([a,b]) => ({type:"pair", a, b})),
-  ];
+document.getElementById("start").onclick = async () => {
+  activo=true;
+  document.getElementById("stop").disabled=false;
+  ciclo();
+};
 
-  // ====== UI ======
-  const promptEl = document.getElementById("prompt");
-  const statusEl = document.getElementById("status");
-  const modeEl = document.getElementById("mode");
-  const secsEl = document.getElementById("secs");
-  const pauseEl = document.getElementById("pause");
+document.getElementById("stop").onclick = ()=> activo=false;
 
-  const btnPerm = document.getElementById("btnPerm");
-  const btnStart = document.getElementById("btnStart");
-  const btnStop  = document.getElementById("btnStop");
-  const btnSpeak = document.getElementById("btnSpeak");
+async function ciclo(){
+  while(activo){
+    let p = palabras[i % palabras.length];
+    word.textContent = p;
+    info.textContent="Habla ahora";
 
-  const playback = document.getElementById("playback");
-  const btnDownload = document.getElementById("btnDownload");
-
-  // ====== Audio/Mic ======
-  let stream = null;
-  let recorder = null;
-  let chunks = [];
-  let lastBlob = null;
-  let running = false;
-  let idx = 0;
-  let currentList = [];
-
-  function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
-
-  function speak(text){
-    // Intenta TTS del navegador. Si no está disponible, al menos muestra texto.
-    try{
-      if (!("speechSynthesis" in window)) return;
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "es-ES";
-      u.rate = 0.9; // suave
-      window.speechSynthesis.speak(u);
-    } catch(e){}
-  }
-
-  function buildList(){
-    const m = modeEl.value;
-    if (m === "series") return SERIES.map(a => ({type:"one", a}));
-    if (m === "pvb") return P_B.map(([a,b]) => ({type:"pair", a, b}));
-    if (m === "pvm") return P_M.map(([a,b]) => ({type:"pair", a, b}));
-    if (m === "vocab") return VOCAB_B.map(a => ({type:"one", a}));
-    if (m === "corto") return CORTO;
-    return [];
-  }
-
-  async function ensureMic(){
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    statusEl.textContent = "Micrófono listo ✅";
-    btnStart.disabled = false;
-    btnStop.disabled = true;
-  }
-
-  function startRec(){
-    chunks = [];
+    chunks=[];
     recorder = new MediaRecorder(stream);
-    recorder.ondataavailable = (e) => chunks.push(e.data);
-    recorder.onstop = () => {
-      lastBlob = new Blob(chunks, { type: "audio/webm" });
-      const url = URL.createObjectURL(lastBlob);
-      playback.src = url;
-      playback.play().catch(()=>{});
-      btnDownload.disabled = false;
-      statusEl.textContent = "Escuchando tu grabación ▶️";
-    };
+    recorder.ondataavailable = e => chunks.push(e.data);
     recorder.start();
+
+    await esperar(2500);   // tiempo para hablar
+    recorder.stop();
+
+    await esperar(300);
+    const blob = new Blob(chunks,{type:"audio/webm"});
+    audio.src = URL.createObjectURL(blob);
+    audio.play();
+
+    info.textContent="Escuchando tu voz";
+    await esperar(3500);   // tiempo para escuchar
+    i++;
   }
+}
 
-  function stopRec(){
-    if (recorder && recorder.state !== "inactive") recorder.stop();
-  }
-
-  function fileNameFor(item, i){
-    const base = item.type === "pair" ? `${item.a}_${item.b}` : item.a;
-    return `practica_${modeEl.value}_${i+1}_${base}`.replaceAll(" ", "_");
-  }
-
-  async function runSession(){
-    running = true;
-    btnStart.disabled = true;
-    btnStop.disabled = false;
-
-    currentList = buildList();
-    idx = 0;
-
-    while (running && idx < currentList.length){
-      const item = currentList[idx];
-      const secs = Number(secsEl.value || 2.5);
-      const pause = Number(pauseEl.value || 1.5);
-
-      // 1) mostrar + leer
-      if (item.type === "pair"){
-        promptEl.textContent = `${item.a} / ${item.b}`;
-        statusEl.textContent = "Escucha y luego repite ambas";
-        speak(`${item.a}. ${item.b}.`);
-      } else {
-        promptEl.textContent = item.a;
-        statusEl.textContent = "Escucha y luego repite";
-        speak(item.a);
-      }
-
-      await sleep(600);
-
-      // 2) avisar "repite"
-      speak("repite");
-      statusEl.textContent = "Grabando tu repetición… 🎙️";
-
-      // 3) grabar
-      startRec();
-      await sleep(secs * 1000);
-      stopRec();
-
-      // 4) espera breve a que se prepare y suene
-      await sleep(400);
-
-      // pausa antes del siguiente
-      statusEl.textContent = "Listo. Siguiente en breve…";
-      await sleep(pause * 1000);
-
-      idx++;
-    }
-
-    running = false;
-    btnStart.disabled = false;
-    btnStop.disabled = true;
-    statusEl.textContent = "Sesión finalizada ✅";
-    promptEl.textContent = "Listo";
-  }
-
-  btnPerm.addEventListener("click", async () => {
-    try { await ensureMic(); }
-    catch(e){ statusEl.textContent = "No se pudo acceder al micrófono. Revisa permisos."; }
-  });
-
-  btnStart.addEventListener("click", async () => {
-    if (!stream) return;
-    runSession();
-  });
-
-  btnStop.addEventListener("click", () => {
-    running = false;
-    btnStop.disabled = true;
-    statusEl.textContent = "Detenido.";
-  });
-
-  btnSpeak.addEventListener("click", () => {
-    const item = currentList[idx] || {type:"one", a: promptEl.textContent};
-    if (item.type === "pair") speak(`${item.a}. ${item.b}.`);
-    else speak(item.a || " ");
-  });
-
-  btnDownload.addEventListener("click", () => {
-    if (!lastBlob) return;
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(lastBlob);
-    a.download = "ultima_grabacion.webm";
-    a.click();
-  });
+function esperar(ms){ return new Promise(r=>setTimeout(r,ms)); }
 </script>
+
 </body>
 </html>
