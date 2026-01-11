@@ -1,201 +1,142 @@
-<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Práctica de pronunciación</title>
-<style>
-  body { font-family: system-ui; background:#fff; margin:0; padding:20px; }
-  h1 { font-size: 32px; margin: 0 0 10px; }
-  .big { font-size: 64px; font-weight: 800; text-align:center; margin: 34px 0; }
-  .controls { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin: 10px 0; }
-  button { font-size: 18px; padding: 14px 18px; border-radius: 16px; border: none; background:#111; color:#fff; }
-  button.secondary { background:#666; }
-  button:disabled { opacity: .5; }
-  audio { width:100%; margin-top:16px; }
-  .info { text-align:center; color:#666; margin-top:10px; }
-  .row { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top: 12px; }
-  input { padding:10px 12px; border-radius: 12px; border:1px solid #ccc; width: 90px; text-align:center; }
-</style>
-</head>
-<body>
-
-<h1>Práctica de pronunciación</h1>
-
-<div class="big" id="word">Presiona comenzar</div>
-
-<div class="controls">
-  <button id="perm">Permitir micrófono</button>
-  <button id="start" disabled>Comenzar</button>
-  <button id="stop" class="secondary" disabled>Detener</button>
-</div>
-
-<div class="row">
-  <label>Hablar (seg):
-    <input id="talkSecs" type="number" min="1" max="10" step="0.5" value="2.5">
-  </label>
-  <label>Escuchar (seg):
-    <input id="listenSecs" type="number" min="1" max="10" step="0.5" value="3.0">
-  </label>
-</div>
-
-<audio id="audio" controls></audio>
-<div class="info" id="info">Consejo: usa audífonos. Si está en silencio (switch), puede no sonar.</div>
-
 <script>
-  // Lista (puedes ampliar)
-  const palabras = [
-    "pa","pe","pi","po","pu",
-    "aba","obo","ubu","ebe","ibi",
-    "pasa","basa","pase","base","peso","beso","peca","beca","pasto","basto",
-    "pala","bala","pata","bata","pudo","mudo"
+const palabras = [
+  "pa","pe","pi","po","pu",
+  "aba","obo","ubu","ebe","ibi",
+  "pasa","basa","pesa","mesa","pala","bala",
+  "pudo","mudo","bata","bote","buzo","bebé","bicho","billete"
+];
+
+let stream = null, i = 0, activo = false;
+
+const word = document.getElementById("word");
+const info = document.getElementById("info");
+const audio = document.getElementById("audio");
+const btnStart = document.getElementById("start");
+const btnStop = document.getElementById("stop");
+
+function esperar(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+function elegirMimeType() {
+  const opciones = [
+    "audio/mp4;codecs=mp4a.40.2", // iPhone suele soportar esto
+    "audio/mp4",
+    "audio/aac",
+    "audio/webm;codecs=opus",
+    "audio/webm"
   ];
-
-  const word = document.getElementById("word");
-  const info = document.getElementById("info");
-  const audioEl = document.getElementById("audio");
-  const talkSecsEl = document.getElementById("talkSecs");
-  const listenSecsEl = document.getElementById("listenSecs");
-
-  const btnPerm = document.getElementById("perm");
-  const btnStart = document.getElementById("start");
-  const btnStop  = document.getElementById("stop");
-
-  let stream = null;
-  let audioCtx = null;
-  let running = false;
-  let idx = 0;
-
-  function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
-
-  async function pedirMicrofono(){
-    try{
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Crear AudioContext SOLO tras gesto del usuario (iOS lo exige)
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      info.textContent = "Micrófono listo ✅";
-      btnStart.disabled = false;
-    } catch(e){
-      info.textContent = "No se pudo acceder al micrófono. Revisa permisos en Safari.";
+  for (const t of opciones) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) {
+      return t;
     }
   }
+  return ""; // deja que el navegador elija
+}
 
-  function floatTo16BitPCM(output, offset, input) {
-    for (let i = 0; i < input.length; i++, offset += 2) {
-      let s = Math.max(-1, Math.min(1, input[i]));
-      output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-    }
-  }
-
-  function writeString(view, offset, string) {
-    for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
-  }
-
-  function encodeWAV(samples, sampleRate) {
-    const buffer = new ArrayBuffer(44 + samples.length * 2);
-    const view = new DataView(buffer);
-
-    writeString(view, 0, "RIFF");
-    view.setUint32(4, 36 + samples.length * 2, true);
-    writeString(view, 8, "WAVE");
-    writeString(view, 12, "fmt ");
-    view.setUint32(16, 16, true);      // PCM
-    view.setUint16(20, 1, true);       // format
-    view.setUint16(22, 1, true);       // mono
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);      // bits
-    writeString(view, 36, "data");
-    view.setUint32(40, samples.length * 2, true);
-
-    floatTo16BitPCM(view, 44, samples);
-    return new Blob([view], { type: "audio/wav" });
-  }
-
-  async function grabarWav(duracionMs){
-    // ScriptProcessor sigue funcionando en iOS; es lo más simple y compatible.
-    const source = audioCtx.createMediaStreamSource(stream);
-    const processor = audioCtx.createScriptProcessor(4096, 1, 1);
-
-    let chunks = [];
-    processor.onaudioprocess = (e) => {
-      const input = e.inputBuffer.getChannelData(0);
-      chunks.push(new Float32Array(input)); // copiamos
-    };
-
-    source.connect(processor);
-    processor.connect(audioCtx.destination); // requerido en iOS para que procese
-
-    await sleep(duracionMs);
-
-    // stop
-    processor.disconnect();
-    source.disconnect();
-
-    // concatenar
-    let length = 0;
-    for (const c of chunks) length += c.length;
-    const samples = new Float32Array(length);
-    let offset = 0;
-    for (const c of chunks) { samples.set(c, offset); offset += c.length; }
-
-    return encodeWAV(samples, audioCtx.sampleRate);
-  }
-
-  async function reproducirBlob(blob){
-    const url = URL.createObjectURL(blob);
-    audioEl.src = url;
-    try{
-      await audioEl.play();
-    } catch(e){
-      // iOS a veces bloquea autoplay si no se considera gesto: mostramos instrucción
-      info.textContent = "Grabado ✅. Toca Play para escuchar.";
-    }
-  }
-
-  async function ciclo(){
-    running = true;
-    btnStop.disabled = false;
-    btnStart.disabled = true;
-
-    while(running){
-      const talkSecs = Number(talkSecsEl.value || 2.5);
-      const listenSecs = Number(listenSecsEl.value || 3.0);
-
-      const p = palabras[idx % palabras.length];
-      word.textContent = p;
-      info.textContent = "Di la palabra ahora…";
-
-      // grabar
-      const wav = await grabarWav(talkSecs * 1000);
-
-      // reproducir
-      info.textContent = "Escuchando tu voz ▶️";
-      await reproducirBlob(wav);
-
-      await sleep(listenSecs * 1000);
-      idx++;
-    }
-
-    info.textContent = "Detenido.";
-    btnStop.disabled = true;
+async function pedirMicrofono(){
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    info.textContent = "Micrófono listo ✅";
     btnStart.disabled = false;
+  } catch (e) {
+    info.textContent = "Error al pedir micrófono: " + (e?.message || e);
+  }
+}
+
+async function grabarUnaVez(duracionMs){
+  return new Promise((resolve, reject) => {
+    try {
+      const mimeType = elegirMimeType();
+      const chunks = [];
+
+      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+
+      rec.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      rec.onerror = (e) => reject(e.error || e);
+
+      rec.onstop = () => {
+        try {
+          const tipoFinal = rec.mimeType || (chunks[0] && chunks[0].type) || "audio/mp4";
+          const blob = new Blob(chunks, { type: tipoFinal });
+          resolve({ blob, tipoFinal, size: blob.size });
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      rec.start();
+      setTimeout(() => {
+        try { rec.stop(); } catch (err) { reject(err); }
+      }, duracionMs);
+
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+async function ciclo(){
+  while (activo) {
+    const p = palabras[i % palabras.length];
+    word.textContent = p;
+
+    info.textContent = "Di la palabra ahora…";
+    await esperar(400); // mini-pausa para prepararte
+
+    try {
+      // 1) grabar
+      const { blob, tipoFinal, size } = await grabarUnaVez(2500);
+
+      if (!size || size < 500) {
+        info.textContent = "Grabación muy corta/vacía. Revisa permisos o prueba con audífonos.";
+        await esperar(1200);
+        i++;
+        continue;
+      }
+
+      // 2) reproducir
+      const url = URL.createObjectURL(blob);
+      audio.src = url;
+
+      info.textContent = "Reproduciendo tu voz ▶️";
+      try {
+        await audio.play(); // puede fallar si iOS bloquea autoplay
+      } catch (e) {
+        info.textContent = "Toca Play para escuchar (iPhone bloqueó autoplay).";
+      }
+
+      // espera un poco para que alcances a escuchar
+      await esperar(3000);
+
+    } catch (e) {
+      info.textContent = "Error: " + (e?.message || e);
+      await esperar(1500);
+    }
+
+    i++;
   }
 
-  btnPerm.onclick = pedirMicrofono;
+  info.textContent = "Detenido.";
+}
 
-  btnStart.onclick = async () => {
-    if (!stream || !audioCtx){
-      info.textContent = "Primero pulsa 'Permitir micrófono'.";
-      return;
-    }
-    // Reanudar contexto (iOS)
-    try { await audioCtx.resume(); } catch(e){}
-    ciclo();
-  };
+document.getElementById("perm").onclick = pedirMicrofono;
 
-  btnStop.onclick = () => { running = false; };
+btnStart.onclick = () => {
+  if (!stream) {
+    info.textContent = "Primero pulsa 'Permitir micrófono'.";
+    return;
+  }
+  activo = true;
+  btnStop.disabled = false;
+  btnStart.disabled = true;
+  ciclo();
+};
+
+btnStop.onclick = () => {
+  activo = false;
+  btnStop.disabled = true;
+  btnStart.disabled = false;
+};
 </script>
-</body>
-</html>
