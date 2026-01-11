@@ -1,90 +1,70 @@
-<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Práctica de Fonemas</title>
-<style>
-body { font-family: system-ui; background:#f9f9f9; margin:0; padding:20px; }
-h1 { font-size: 28px; }
-.big { font-size: 48px; font-weight: 800; text-align:center; margin: 40px 0; }
-button { font-size: 18px; padding: 14px 20px; border-radius: 14px; border: none; background:#222; color:#fff; }
-button.secondary { background:#666; }
-.controls { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
-audio { width:100%; margin-top:20px; }
-.info { text-align:center; color:#666; margin-top:10px; }
-</style>
-</head>
-<body>
-
-<h1>Práctica de pronunciación</h1>
-
-<div class="big" id="word">Presiona comenzar</div>
-
-<div class="controls">
-  <button id="perm">Permitir micrófono</button>
-  <button id="start" disabled>Comenzar</button>
-  <button id="stop" class="secondary" disabled>Detener</button>
-</div>
-
-<audio id="audio" controls></audio>
-<div class="info" id="info"></div>
-
 <script>
 const palabras = [
-"pa","pe","pi","po","pu",
-"aba","obo","ubu","ebe","ibi",
-"pasa","basa","pesa","mesa","pala","bala",
-"pudo","mudo","bata","bote","buzo","bebé","bicho","billete"
+  "pa","pe","pi","po","pu",
+  "aba","obo","ubu","ebe","ibi",
+  "pasa","basa","pesa","mesa","pala","bala",
+  "pudo","mudo","bata","bote","buzo","bebé","bicho","billete"
 ];
 
-let stream, recorder, chunks=[], i=0, activo=false;
+let stream = null, i = 0, activo = false;
 
-const word=document.getElementById("word");
-const info=document.getElementById("info");
-const audio=document.getElementById("audio");
+const word = document.getElementById("word");
+const info = document.getElementById("info");
+const audio = document.getElementById("audio");
+const btnStart = document.getElementById("start");
+const btnStop = document.getElementById("stop");
 
-document.getElementById("perm").onclick = async () => {
-  stream = await navigator.mediaDevices.getUserMedia({audio:true});
-  document.getElementById("start").disabled=false;
-  info.textContent="Micrófono listo";
-};
+function esperar(ms){ return new Promise(r => setTimeout(r, ms)); }
 
-document.getElementById("start").onclick = async () => {
-  activo=true;
-  document.getElementById("stop").disabled=false;
-  ciclo();
-};
+function elegirMimeType() {
+  const opciones = [
+    "audio/mp4;codecs=mp4a.40.2", // iPhone suele soportar esto
+    "audio/mp4",
+    "audio/aac",
+    "audio/webm;codecs=opus",
+    "audio/webm"
+  ];
+  for (const t of opciones) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) {
+      return t;
+    }
+  }
+  return ""; // deja que el navegador elija
+}
 
-document.getElementById("stop").onclick = ()=> activo=false;
-
-async function ciclo(){
-  while(activo){
-    let p = palabras[i % palabras.length];
-    word.textContent = p;
-    info.textContent="Habla ahora";
-
-    chunks=[];
-    recorder = new MediaRecorder(stream);
-    recorder.ondataavailable = e => chunks.push(e.data);
-    recorder.start();
-
-    await esperar(2500);   // tiempo para hablar
-    recorder.stop();
-
-    await esperar(300);
-    const blob = new Blob(chunks,{type:"audio/webm"});
-    audio.src = URL.createObjectURL(blob);
-    audio.play();
-
-    info.textContent="Escuchando tu voz";
-    await esperar(3500);   // tiempo para escuchar
-    i++;
+async function pedirMicrofono(){
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    info.textContent = "Micrófono listo ✅";
+    btnStart.disabled = false;
+  } catch (e) {
+    info.textContent = "Error al pedir micrófono: " + (e?.message || e);
   }
 }
 
-function esperar(ms){ return new Promise(r=>setTimeout(r,ms)); }
-</script>
+async function grabarUnaVez(duracionMs){
+  return new Promise((resolve, reject) => {
+    try {
+      const mimeType = elegirMimeType();
+      const chunks = [];
 
-</body>
-</html>
+      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+
+      rec.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      rec.onerror = (e) => reject(e.error || e);
+
+      rec.onstop = () => {
+        try {
+          const tipoFinal = rec.mimeType || (chunks[0] && chunks[0].type) || "audio/mp4";
+          const blob = new Blob(chunks, { type: tipoFinal });
+          resolve({ blob, tipoFinal, size: blob.size });
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      rec.start();
+      setTimeou
