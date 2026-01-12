@@ -145,12 +145,16 @@ function encodeWAV(samples, sr){
 }
 
 async function grabarWav(ms){
+  abortNow = false;
   const src=audioCtx.createMediaStreamSource(stream);
   const p=audioCtx.createScriptProcessor(4096,1,1);
   let ch=[];
   p.onaudioprocess=e=>ch.push(new Float32Array(e.inputBuffer.getChannelData(0)));
   src.connect(p); p.connect(audioCtx.destination);
-  await sleep(ms);
+  for (let t = 0; t < ms; t += 50) {
+  if (abortNow) break;
+  await sleep(50);
+}
   p.disconnect(); src.disconnect();
   let len=ch.reduce((a,c)=>a+c.length,0), s=new Float32Array(len), off=0;
   ch.forEach(c=>{s.set(c,off); off+=c.length;});
@@ -180,7 +184,7 @@ async function reproducir(blob){
     i === k ? `<span class="diff">${ch}</span>` : ch
   ).join("");
 
-  return `${aHtml}<span class="sep"> / </span>${bHtml}`;
+  return `${aHtml}<span class="sep">→</span>${bHtml}`;
 }
 
 async function ciclo(){
@@ -226,8 +230,11 @@ async function ciclo(){
   btnStart.disabled = false;
 }
 
-    const wav=await grabarWav(talkSecs*1000);
+    const wav = await grabarWav(talkSecs * 1000);
+if (!running) break;
     await reproducir(wav);
+  if (!running) break;
+
     await sleep(listenSecs*1000);
     idx++;
   }
@@ -236,7 +243,12 @@ async function ciclo(){
 
 btnPerm.onclick=pedirMicrofono;
 btnStart.onclick=async()=>{ await audioCtx.resume(); ciclo(); };
-btnStop.onclick=()=>running=false;
+btnStop.onclick = () => {
+  running = false;
+  abortNow = true;
+  infoEl.textContent = "Detenido.";
+};
+
 
 /* ===== Cámara ===== */
 const cam=document.getElementById("cam"), camInfo=document.getElementById("camInfo"),
@@ -249,6 +261,7 @@ camOff.onclick=()=>{ if(camStream){ camStream.getTracks().forEach(t=>t.stop()); 
 </div>
 </body>
 </html>
+
 
 
 
