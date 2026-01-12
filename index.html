@@ -166,11 +166,16 @@ async function ciclo(){
     let talkSecs=Number(talkSecsEl.value||2.5), listenSecs=Number(listenSecsEl.value||3.0);
     const item=list[idx%list.length];
     if(item.type==="pair"){
-      talkSecs=Number(talkPairSecsEl.value||4.5); listenSecs=Number(listenPairSecsEl.value||5.0);
-      wordEl.textContent=item.a; await sleep(800);
-      wordEl.textContent=item.b; await sleep(800);
-      wordEl.textContent=`${item.a} / ${item.b}`;
-    } else wordEl.textContent=item.a;
+      talkSecs = Number(talkPairSecsEl.value || 4.5);
+      listenSecs = Number(listenPairSecsEl.value || 5.0);
+
+      // Mostrar solo las dos palabras juntas (sin flashes)
+      wordEl.textContent = `${item.a} / ${item.b}`;
+      infoEl.textContent = "Di primero la izquierda y luego la derecha…";
+    } else {
+  wordEl.textContent = item.a;
+  infoEl.textContent = "Di la palabra ahora…";
+}
 
     const wav=await grabarWav(talkSecs*1000);
     await reproducir(wav);
@@ -195,5 +200,6 @@ camOff.onclick=()=>{ if(camStream){ camStream.getTracks().forEach(t=>t.stop()); 
 </div>
 </body>
 </html>
+
 
 
