@@ -1,26 +1,197 @@
-let talkSecs = Number(talkSecsEl.value || 2.5);
-let listenSecs = Number(listenSecsEl.value || 3.0);
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Práctica de pronunciación</title>
+<style>
+  body { font-family: system-ui; background:#fff; margin:0; padding:20px; }
+  h1 { font-size: 32px; margin: 0 0 10px; }
+  .big { font-size: 64px; font-weight: 800; text-align:center; margin: 20px 0 10px; }
+  .controls { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin: 10px 0; }
+  button { font-size: 18px; padding: 14px 18px; border-radius: 16px; border: none; background:#111; color:#fff; }
+  button.secondary { background:#666; }
+  button:disabled { opacity: .5; }
+  audio { width:100%; margin-top:14px; }
+  .info { text-align:center; color:#666; margin-top:10px; }
+  .row { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top: 12px; }
+  input, select { padding:10px 12px; border-radius: 12px; border:1px solid #ccc; text-align:center; font-size:16px; }
+  .panel { max-width: 760px; margin: 0 auto; }
+  .camWrap { text-align:center; margin-top:16px; }
+  video { width:100%; max-width:520px; display:block; margin:0 auto; border-radius:16px; border:1px solid #ddd; background:#000; }
+</style>
+</head>
+<body>
+<div class="panel">
 
-const item = list[idx % list.length];
+<h1>Práctica de pronunciación</h1>
 
-if (item.type === "pair"){
-  // tiempos automáticos para pares
-  talkSecs = Number(talkPairSecsEl.value || 4.5);
-  listenSecs = Number(listenPairSecsEl.value || 5.0);
+<div class="row">
+  <label>
+    Ejercicio:
+    <select id="mode">
+      <option value="series">Series (pa/pe/pi… + aba/obo…)</option>
+      <option value="pvb">Discriminación P / B</option>
+      <option value="pvm">Discriminación P / M</option>
+      <option value="vocabB">Vocabulario con B</option>
+      <option value="corto">Sesión corta suave</option>
+    </select>
+  </label>
 
-  // mostrar separado (1° palabra, luego 2° palabra)
-  wordEl.textContent = item.a;
-  infoEl.textContent = "Di la 1ª palabra…";
-  await sleep(900);
+  <label>Hablar (seg):
+    <input id="talkSecs" type="number" min="1" max="10" step="0.5" value="2.5">
+  </label>
 
-  wordEl.textContent = item.b;
-  infoEl.textContent = "Di la 2ª palabra…";
-  await sleep(900);
+  <label>Escuchar (seg):
+    <input id="listenSecs" type="number" min="1" max="10" step="0.5" value="3.0">
+  </label>
 
-  // ahora graba ambas en una sola toma
-  wordEl.textContent = `${item.a} / ${item.b}`;
-  infoEl.textContent = "Ahora di ambas seguidas (1ª y 2ª)…";
-} else {
-  wordEl.textContent = item.a;
-  infoEl.textContent = "Di la palabra ahora…";
+  <label>Hablar PAR (seg):
+    <input id="talkPairSecs" type="number" min="1" max="15" step="0.5" value="4.5">
+  </label>
+
+  <label>Escuchar PAR (seg):
+    <input id="listenPairSecs" type="number" min="1" max="15" step="0.5" value="5.0">
+  </label>
+</div>
+
+<div class="big" id="word">Presiona comenzar</div>
+
+<div class="controls">
+  <button id="perm">Permitir micrófono</button>
+  <button id="start" disabled>Comenzar</button>
+  <button id="stop" class="secondary" disabled>Detener</button>
+</div>
+
+<div class="camWrap">
+  <div class="controls" style="margin-bottom:10px;">
+    <button id="camOn" class="secondary">Activar cámara</button>
+    <button id="camOff" class="secondary" disabled>Apagar cámara</button>
+  </div>
+
+  <video id="cam" playsinline muted autoplay></video>
+  <div class="info" id="camInfo">Cámara apagada.</div>
+</div>
+
+<audio id="audio" controls></audio>
+<div class="info" id="info">Usa audífonos para mejor calidad.</div>
+
+<script>
+/* ===== LISTAS ===== */
+const SERIES = ["pa","pe","pi","po","pu","aba","obo","ubu","ebe","ibi","bab","bob","bub","beb","bib","abababa","obobobo","ubububu","ebebebe","ibibibi"];
+
+const P_B = [["pasa","basa"],["pase","base"],["peso","beso"],["peca","beca"],["pasto","basto"],["pala","bala"],["pata","bata"],["pudo","budo"]];
+
+const P_M = [["pasa","masa"],["palo","malo"],["pesa","mesa"],["pudo","mudo"],["pata","mata"]];
+
+const VOCAB_B = ["bata","base","bala","bote","buzo","bebé","beso","bicho","billete"];
+
+const CORTO = [
+  ...SERIES.slice(0,10).map(a => ({type:"one", a})),
+  ...P_B.slice(0,5).map(([a,b]) => ({type:"pair", a, b})),
+  ...P_M.slice(0,5).map(([a,b]) => ({type:"pair", a, b}))
+];
+
+function buildList(m){
+  if(m==="series") return SERIES.map(a=>({type:"one",a}));
+  if(m==="pvb") return P_B.map(([a,b])=>({type:"pair",a,b}));
+  if(m==="pvm") return P_M.map(([a,b])=>({type:"pair",a,b}));
+  if(m==="vocabB") return VOCAB_B.map(a=>({type:"one",a}));
+  if(m==="corto") return CORTO;
+  return [];
 }
+
+/* ===== WAV Recorder ===== */
+const wordEl = document.getElementById("word");
+const infoEl = document.getElementById("info");
+const audioEl = document.getElementById("audio");
+const modeEl = document.getElementById("mode");
+const talkSecsEl = document.getElementById("talkSecs");
+const listenSecsEl = document.getElementById("listenSecs");
+const talkPairSecsEl = document.getElementById("talkPairSecs");
+const listenPairSecsEl = document.getElementById("listenPairSecs");
+const btnPerm = document.getElementById("perm");
+const btnStart = document.getElementById("start");
+const btnStop = document.getElementById("stop");
+
+let stream=null, audioCtx=null, running=false, idx=0, list=[];
+
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+async function pedirMicrofono(){
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    infoEl.textContent="Micrófono listo";
+    btnStart.disabled=false;
+  }catch(e){ infoEl.textContent="Error micrófono"; }
+}
+
+function encodeWAV(samples, sr){
+  const b=new ArrayBuffer(44+samples.length*2),v=new DataView(b);
+  const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+  ws(0,"RIFF");v.setUint32(4,36+samples.length*2,true);ws(8,"WAVE");ws(12,"fmt ");
+  v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+  v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);
+  v.setUint16(34,16,true);ws(36,"data");v.setUint32(40,samples.length*2,true);
+  let o=44; for(let i=0;i<samples.length;i++,o+=2){
+    let s=Math.max(-1,Math.min(1,samples[i]));
+    v.setInt16(o,s<0?s*0x8000:s*0x7fff,true);
+  }
+  return new Blob([v],{type:"audio/wav"});
+}
+
+async function grabarWav(ms){
+  const src=audioCtx.createMediaStreamSource(stream);
+  const p=audioCtx.createScriptProcessor(4096,1,1);
+  let ch=[];
+  p.onaudioprocess=e=>ch.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+  src.connect(p); p.connect(audioCtx.destination);
+  await sleep(ms);
+  p.disconnect(); src.disconnect();
+  let len=ch.reduce((a,c)=>a+c.length,0), s=new Float32Array(len), off=0;
+  ch.forEach(c=>{s.set(c,off); off+=c.length;});
+  return encodeWAV(s,audioCtx.sampleRate);
+}
+
+async function reproducir(blob){
+  audioEl.src=URL.createObjectURL(blob);
+  try{ await audioEl.play(); }catch(e){ infoEl.textContent="Toca play"; }
+}
+
+async function ciclo(){
+  running=true; btnStop.disabled=false; btnStart.disabled=true;
+  list=buildList(modeEl.value); idx=0;
+  while(running){
+    let talkSecs=Number(talkSecsEl.value||2.5), listenSecs=Number(listenSecsEl.value||3.0);
+    const item=list[idx%list.length];
+    if(item.type==="pair"){
+      talkSecs=Number(talkPairSecsEl.value||4.5); listenSecs=Number(listenPairSecsEl.value||5.0);
+      wordEl.textContent=item.a; await sleep(800);
+      wordEl.textContent=item.b; await sleep(800);
+      wordEl.textContent=`${item.a} / ${item.b}`;
+    } else wordEl.textContent=item.a;
+
+    const wav=await grabarWav(talkSecs*1000);
+    await reproducir(wav);
+    await sleep(listenSecs*1000);
+    idx++;
+  }
+  btnStop.disabled=true; btnStart.disabled=false;
+}
+
+btnPerm.onclick=pedirMicrofono;
+btnStart.onclick=async()=>{ await audioCtx.resume(); ciclo(); };
+btnStop.onclick=()=>running=false;
+
+/* ===== Cámara ===== */
+const cam=document.getElementById("cam"), camInfo=document.getElementById("camInfo"),
+      camOn=document.getElementById("camOn"), camOff=document.getElementById("camOff");
+let camStream=null;
+camOn.onclick=async()=>{ camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"}}); cam.srcObject=camStream; camOn.disabled=true; camOff.disabled=false; camInfo.textContent="Cámara encendida"; };
+camOff.onclick=()=>{ if(camStream){ camStream.getTracks().forEach(t=>t.stop()); cam.srcObject=null; } camOn.disabled=false; camOff.disabled=true; camInfo.textContent="Cámara apagada"; };
+</script>
+
+</div>
+</body>
+</html>
