@@ -162,22 +162,68 @@ async function reproducir(blob){
   try{ await audioEl.play(); }catch(e){ infoEl.textContent="Toca play"; }
 }
 
+ function renderPair(a, b){
+  // Resalta la primera letra distinta entre ambas palabras
+  const minLen = Math.min(a.length, b.length);
+  let k = -1;
+  for (let i = 0; i < minLen; i++){
+    if (a[i] !== b[i]) { k = i; break; }
+  }
+  // Si no hay diferencia dentro del largo común, resalta el “extra”
+  if (k === -1) k = minLen;
+
+  const aHtml = a.split("").map((ch, i) =>
+    i === k ? `<span class="diff">${ch}</span>` : ch
+  ).join("");
+
+  const bHtml = b.split("").map((ch, i) =>
+    i === k ? `<span class="diff">${ch}</span>` : ch
+  ).join("");
+
+  return `${aHtml}<span class="sep"> / </span>${bHtml}`;
+}
+
 async function ciclo(){
-  running=true; btnStop.disabled=false; btnStart.disabled=true;
-  list=buildList(modeEl.value); idx=0;
-  while(running){
-    let talkSecs=Number(talkSecsEl.value||2.5), listenSecs=Number(listenSecsEl.value||3.0);
-    const item=list[idx%list.length];
-    if(item.type==="pair"){
+  running = true;
+  btnStop.disabled = false;
+  btnStart.disabled = true;
+
+  list = buildList(modeEl.value);
+  idx = 0;
+
+  while (running) {
+    let talkSecs = Number(talkSecsEl.value || 2.5);
+    let listenSecs = Number(listenSecsEl.value || 3.0);
+
+    const item = list[idx % list.length];
+
+    // ✅ IMPORTANTE: aquí NO hay ninguna línea que muestre item.a solo, si es par
+    if (item.type === "pair") {
       talkSecs = Number(talkPairSecsEl.value || 4.5);
       listenSecs = Number(listenPairSecsEl.value || 5.0);
 
-      // Mostrar solo las dos palabras juntas (sin flashes)
-      wordEl.textContent = `${item.a} / ${item.b}`;
+      // Mostrar SIEMPRE las 2 palabras juntas y con resaltado
+      wordEl.innerHTML = renderPair(item.a, item.b);
       infoEl.textContent = "Di primero la izquierda y luego la derecha…";
     } else {
-  wordEl.textContent = item.a;
-  infoEl.textContent = "Di la palabra ahora…";
+      wordEl.textContent = item.a;
+      infoEl.textContent = "Di la palabra ahora…";
+    }
+
+    // Grabar tu voz (WAV)
+    const wav = await grabarWav(talkSecs * 1000);
+
+    // Reproducir al instante
+    infoEl.textContent = "Escuchando tu voz ▶️";
+    await reproducir(wav);
+
+    await sleep(listenSecs * 1000);
+    idx++;
+  }
+
+  infoEl.textContent = "Detenido.";
+  btnStop.disabled = true;
+  btnStart.disabled = false;
 }
 
     const wav=await grabarWav(talkSecs*1000);
@@ -203,6 +249,7 @@ camOff.onclick=()=>{ if(camStream){ camStream.getTracks().forEach(t=>t.stop()); 
 </div>
 </body>
 </html>
+
 
 
 
