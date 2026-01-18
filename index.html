@@ -7,9 +7,11 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <title>Fono Práctica</title>
+
 <style>
   body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#fff; margin:0; padding:16px; }
-  h1 { font-size: 22px; margin: 0 0 8px; text-align:center; }
+  h1 { font-size: 22px; margin: 0 0 10px; text-align:center; }
+
   .panel { max-width: 820px; margin: 0 auto; }
 
   .row { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin: 10px 0; align-items:center; }
@@ -18,18 +20,19 @@
     text-align:center; font-size:15px; background:#fff;
   }
 
-  .controls { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin: 10px 0; }
+  .controls { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin: 12px 0; }
   button { font-size: 15px; padding: 10px 14px; border-radius: 14px; border: none; background:#111; color:#fff; }
   button.secondary { background:#666; }
-  button.ghost { background:#fff; color:#111; border:1px solid #ccc; }
   button:disabled { opacity: .5; }
 
+  /* Cámara + overlay */
   .camShell { position: relative; max-width: 520px; margin: 10px auto 0; }
   video {
     width:100%; display:block; border-radius:16px; border:1px solid #ddd; background:#000;
     transform: scaleX(-1); /* ✅ espejo */
   }
 
+  /* Palabra encima del video */
   .overlayWord {
     position:absolute; left:50%; top:10px; transform:translateX(-50%);
     background: rgba(255,255,255,.88);
@@ -45,6 +48,7 @@
     backdrop-filter: blur(6px);
   }
 
+  /* Marco guía de boca */
   .mouthGuide{
     position:absolute;
     left:50%;
@@ -58,8 +62,9 @@
     pointer-events:none;
   }
 
+  /* Botones pequeños sobre la cámara */
   .camBtns { position:absolute; right:10px; bottom:10px; display:flex; gap:8px; }
-  .mini { font-size: 13px !important; padding: 8px 10px !important; border-radius: 12px !important; }
+  .mini { font-size: 13px !important; padding: 8px 10px !important; border-radius: 12px !important; background:#666; }
 
   .sep { opacity: .55; padding: 0 10px; font-weight:700; }
   .diff {
@@ -71,6 +76,7 @@
     background: rgba(0,0,0,.06);
   }
 
+  /* Progreso */
   .progressWrap {
     max-width: 520px;
     margin: 12px auto 0;
@@ -84,97 +90,78 @@
 
   audio { width:100%; margin-top:12px; }
   .info { text-align:center; color:#666; margin-top:10px; font-size:14px; }
-  .small { font-size: 12px; color:#666; text-align:center; margin-top: 8px; }
-
-  .card {
-    max-width: 820px; margin: 12px auto; border:1px solid #eee; border-radius: 16px; padding: 10px;
-    background:#fafafa;
-  }
-  .card h2 { font-size: 16px; margin: 0 0 8px; }
+  .small { text-align:center; color:#666; font-size:12px; margin-top:8px; }
 </style>
 </head>
 
 <body>
 <div class="panel">
+  <h1>Fono Práctica (simple)</h1>
 
-<h1>Fono Práctica (PWA)</h1>
-
-<div class="card">
-  <h2>Paciente (opcional)</h2>
   <div class="row">
-    <label>Código/Nombre:
-      <input id="patientCode" placeholder="Ej: Roxana / AB12" style="width:180px">
+    <label>
+      Ejercicio:
+      <select id="mode">
+        <option value="series">Series (pa/pe/pi… + aba/obo…)</option>
+        <option value="pvb">Discriminación P / B</option>
+        <option value="pvm">Discriminación P / M</option>
+        <option value="vocabB">Vocabulario con B</option>
+        <option value="corto">Sesión corta suave</option>
+      </select>
     </label>
-    <button id="savePatient" class="ghost">Guardar</button>
-    <button id="clearPatient" class="ghost">Borrar</button>
+
+    <label>Hablar:
+      <input id="talkSecs" type="number" min="1" max="10" step="0.5" value="2.5">
+    </label>
+
+    <label>Escuchar:
+      <input id="listenSecs" type="number" min="1" max="10" step="0.5" value="3.0">
+    </label>
+
+    <label>Hablar PAR:
+      <input id="talkPairSecs" type="number" min="1" max="15" step="0.5" value="4.5">
+    </label>
+
+    <label>Escuchar PAR:
+      <input id="listenPairSecs" type="number" min="1" max="15" step="0.5" value="5.0">
+    </label>
   </div>
-  <div class="small">Se guarda solo en el teléfono (privacidad). La fono puede pedir que exportes la sesión al final.</div>
-</div>
 
-<div class="row">
-  <label>
-    Ejercicio:
-    <select id="mode">
-      <option value="series">Series (pa/pe/pi… + aba/obo…)</option>
-      <option value="pvb">Discriminación P / B</option>
-      <option value="pvm">Discriminación P / M</option>
-      <option value="vocabB">Vocabulario con B</option>
-      <option value="corto">Sesión corta suave</option>
-    </select>
-  </label>
-
-  <label>Hablar:
-    <input id="talkSecs" type="number" min="1" max="10" step="0.5" value="2.5">
-  </label>
-
-  <label>Escuchar:
-    <input id="listenSecs" type="number" min="1" max="10" step="0.5" value="3.0">
-  </label>
-
-  <label>Hablar PAR:
-    <input id="talkPairSecs" type="number" min="1" max="15" step="0.5" value="4.5">
-  </label>
-
-  <label>Escuchar PAR:
-    <input id="listenPairSecs" type="number" min="1" max="15" step="0.5" value="5.0">
-  </label>
-</div>
-
-<div class="controls">
-  <button id="perm">Permitir micrófono</button>
-  <button id="start" disabled>Comenzar</button>
-  <button id="stop" class="secondary" disabled>Detener</button>
-  <button id="export" class="ghost">Exportar sesión</button>
-  <button id="resetSession" class="ghost">Reiniciar sesión</button>
-</div>
-
-<div class="camShell">
-  <video id="cam" playsinline muted autoplay></video>
-  <div class="mouthGuide" aria-hidden="true"></div>
-  <div class="overlayWord" id="wordOverlay">Presiona comenzar</div>
-
-  <div class="camBtns">
-    <button id="camOn" class="secondary mini">Cámara</button>
-    <button id="camOff" class="secondary mini" disabled>Apagar</button>
+  <div class="controls">
+    <button id="perm">Permitir micrófono</button>
+    <button id="start" disabled>Comenzar</button>
+    <button id="stop" class="secondary" disabled>Detener</button>
   </div>
-</div>
 
-<div class="progressWrap" aria-label="Progreso">
-  <div class="progressBar" id="progressBar"></div>
-</div>
+  <div class="camShell">
+    <video id="cam" playsinline muted autoplay></video>
+    <div class="mouthGuide" aria-hidden="true"></div>
+    <div class="overlayWord" id="wordOverlay">Presiona comenzar</div>
 
-<audio id="audio" controls></audio>
-<div class="info" id="info">Tip: si no suena automático, toca Play una vez. Mejor con audífonos.</div>
+    <div class="camBtns">
+      <button id="camOn" class="mini">Cámara</button>
+      <button id="camOff" class="mini" disabled>Apagar</button>
+    </div>
+  </div>
+
+  <div class="progressWrap" aria-label="Progreso">
+    <div class="progressBar" id="progressBar"></div>
+  </div>
+
+  <audio id="audio" controls></audio>
+  <div class="info" id="info">Tip: si no suena automático, toca Play una vez. Ideal con audífonos.</div>
+  <div class="small">Privacidad: no se guardan audios ni datos. Todo es temporal.</div>
+</div>
 
 <script>
-/* ===== PWA service worker ===== */
+/* PWA: registra service worker si existe */
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./service-worker.js").catch(() => {});
   });
 }
 
-/* ===== LISTAS (pueden crecer) ===== */
+/* ===== LISTAS ===== */
 const SERIES = ["pa","pe","pi","po","pu","aba","obo","ubu","ebe","ibi","bab","bob","bub","beb","bib","abababa","obobobo","ubububu","ebebebe","ibibibi"];
 
 const P_B = [
@@ -213,7 +200,7 @@ function buildList(m){
   return [];
 }
 
-/* ===== UI ===== */
+/* ===== UI refs ===== */
 const infoEl = document.getElementById("info");
 const wordOverlay = document.getElementById("wordOverlay");
 const progressBar = document.getElementById("progressBar");
@@ -228,13 +215,8 @@ const listenPairSecsEl = document.getElementById("listenPairSecs");
 const btnPerm = document.getElementById("perm");
 const btnStart = document.getElementById("start");
 const btnStop  = document.getElementById("stop");
-const btnExport = document.getElementById("export");
-const btnResetSession = document.getElementById("resetSession");
 
-const patientCodeEl = document.getElementById("patientCode");
-const btnSavePatient = document.getElementById("savePatient");
-const btnClearPatient = document.getElementById("clearPatient");
-
+/* Helpers */
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 function setProgress(pct){
   progressBar.style.width = Math.max(0, Math.min(100, pct)) + "%";
@@ -249,7 +231,7 @@ async function runProgress(totalMs){
   setProgress(100);
 }
 
-/* ===== Render pares: “pasa → basa” con diferencias resaltadas ===== */
+/* Render pares: “pasa → basa” con diferencias resaltadas */
 function renderPair(a, b){
   const maxLen = Math.max(a.length, b.length);
   const A = a.padEnd(maxLen, " ");
@@ -270,63 +252,7 @@ function renderPair(a, b){
   return `${aHtml}<span class="sep">→</span>${bHtml}`;
 }
 
-/* ===== Sesión (se guarda local) ===== */
-const LS_PATIENT = "fono_patient_code_v1";
-const LS_SESSION = "fono_session_v1";
-
-let session = {
-  version: 1,
-  startedAt: new Date().toISOString(),
-  patientCode: "",
-  events: [] // {ts, mode, itemText, talkSecs, listenSecs}
-};
-
-function loadPatient(){
-  const v = localStorage.getItem(LS_PATIENT) || "";
-  patientCodeEl.value = v;
-  session.patientCode = v;
-}
-function savePatient(){
-  const v = (patientCodeEl.value || "").trim();
-  localStorage.setItem(LS_PATIENT, v);
-  session.patientCode = v;
-  infoEl.textContent = "Paciente guardado ✅";
-}
-function clearPatient(){
-  localStorage.removeItem(LS_PATIENT);
-  patientCodeEl.value = "";
-  session.patientCode = "";
-  infoEl.textContent = "Paciente borrado.";
-}
-
-function saveSession(){
-  localStorage.setItem(LS_SESSION, JSON.stringify(session));
-}
-function loadSession(){
-  const raw = localStorage.getItem(LS_SESSION);
-  if (!raw) return;
-  try {
-    const s = JSON.parse(raw);
-    if (s && s.version === 1) session = s;
-  } catch {}
-}
-function resetSession(){
-  session = { version: 1, startedAt: new Date().toISOString(), patientCode: (patientCodeEl.value||"").trim(), events: [] };
-  saveSession();
-  infoEl.textContent = "Sesión reiniciada.";
-}
-
-function exportSession(){
-  // Exporta como JSON (la fono lo puede revisar o importar luego)
-  const blob = new Blob([JSON.stringify(session, null, 2)], {type:"application/json"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  const code = (session.patientCode || "paciente").replace(/[^\w-]+/g, "_");
-  a.download = `fono_sesion_${code}_${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-}
-
-/* ===== Audio (WAV iPhone compatible) ===== */
+/* ===== Audio (WAV, iPhone compatible) ===== */
 let stream=null, audioCtx=null;
 let running=false, abortNow=false;
 let recSource=null, recProcessor=null;
@@ -377,7 +303,7 @@ async function grabarWav(ms){
   };
 
   recSource.connect(recProcessor);
-  recProcessor.connect(audioCtx.destination); // iOS requirement
+  recProcessor.connect(audioCtx.destination); // requerido iOS
 
   for (let t = 0; t < ms; t += 50){
     if (abortNow || !running) break;
@@ -396,6 +322,7 @@ async function grabarWav(ms){
 
 async function reproducir(blob){
   if (!blob) return;
+  // Reproduce y luego "libera" el audio (no se guarda)
   audioEl.src = URL.createObjectURL(blob);
   try { await audioEl.play(); }
   catch { infoEl.textContent = "Grabado ✅. Toca Play para escuchar."; }
@@ -419,32 +346,17 @@ async function ciclo(){
     let listenSecs = Number(listenSecsEl.value || 3.0);
     const item = list[idx % list.length];
 
-    let itemText = "";
-
     if(item.type === "pair"){
       talkSecs = Number(talkPairSecsEl.value || 4.5);
       listenSecs = Number(listenPairSecsEl.value || 5.0);
-      wordOverlay.innerHTML = renderPair(item.a, item.b);
-      infoEl.textContent = "Di primero la izquierda y luego la derecha…";
-      itemText = `${item.a} -> ${item.b}`;
+      wordOverlay.innerHTML = renderPair(item.a, item.b); // ✅ siempre juntas
+      infoEl.textContent = "Di izquierda y luego derecha…";
     } else {
       wordOverlay.textContent = item.a;
       infoEl.textContent = "Di la palabra ahora…";
-      itemText = item.a;
     }
 
-    // guardar evento (sin audio, solo registro)
-    session.patientCode = (patientCodeEl.value || "").trim();
-    session.events.push({
-      ts: new Date().toISOString(),
-      mode: modeEl.value,
-      itemText,
-      talkSecs,
-      listenSecs
-    });
-    saveSession();
-
-    // grabar
+    // GRABAR
     infoEl.textContent = "Grabando… 🎙️";
     setProgress(0);
     const talkMs = Math.round(talkSecs * 1000);
@@ -455,13 +367,14 @@ async function ciclo(){
     if (!running || abortNow) break;
     if (!wav) break;
 
-    // reproducir
+    // ESCUCHAR
     infoEl.textContent = "Escuchando tu voz ▶️";
     setProgress(0);
     await reproducir(wav);
 
     const listenMs = Math.round(listenSecs * 1000);
     await runProgress(listenMs);
+
     if (!running || abortNow) break;
 
     idx++;
@@ -475,7 +388,7 @@ async function ciclo(){
   btnStart.disabled = false;
 }
 
-/* ===== Botones ===== */
+/* Botones */
 btnPerm.onclick = pedirMicrofono;
 
 btnStart.onclick = async () => {
@@ -488,18 +401,13 @@ btnStart.onclick = async () => {
 };
 
 btnStop.onclick = () => {
+  // ✅ Detener rápido
   running = false;
   abortNow = true;
   stopRecorderChain();
   setProgress(0);
-  infoEl.textContent = "Deteniendo…";
+  infoEl.textContent = "Detenido.";
 };
-
-btnExport.onclick = exportSession;
-btnResetSession.onclick = resetSession;
-
-btnSavePatient.onclick = savePatient;
-btnClearPatient.onclick = clearPatient;
 
 /* ===== Cámara frontal ===== */
 const cam = document.getElementById("cam");
@@ -527,18 +435,10 @@ camOff.onclick = () => {
   camOn.disabled=false;
   camOff.disabled=true;
 };
-
-/* ===== Init ===== */
-loadPatient();
-loadSession();
-session.patientCode = (patientCodeEl.value || "").trim();
-saveSession();
 </script>
 
-</div>
 </body>
 </html>
-
 
 
 
